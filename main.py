@@ -14,11 +14,12 @@ cap = cv2.VideoCapture(0)
 screen_w, screen_h = pyautogui.size()
 
 blink_counter = 0
-BLINK_FRAMES = 5
+BLINK_FRAMES = 2
 
 calibration_points = {}
 gaze_transform = None
 filtered_cursor = None
+
 
 def get_iris(frame, landmarks):
     h, w, _ = frame.shape
@@ -27,6 +28,7 @@ def get_iris(frame, landmarks):
     left_iris_x, left_iris_y = int(left_iris.x * w), int(left_iris.y * h)
     right_iris_x, right_iris_y = int(right_iris.x * w), int(right_iris.y * h)
     return (left_iris_x + right_iris_x) // 2, (left_iris_y + right_iris_y) // 2
+
 
 def compute_gaze_transform():
     if len(calibration_points) < 3:
@@ -50,6 +52,7 @@ def compute_gaze_transform():
 
     return np.vstack([coeffs_x, coeffs_y])
 
+
 def calibrate():
     calibration_points.clear()
 
@@ -58,7 +61,7 @@ def calibrate():
         "top-right": (screen_w - 100, 100),
         "bottom-left": (100, screen_h - 100),
         "bottom-right": (screen_w - 100, screen_h - 100),
-        "center": (screen_w // 2, screen_h // 2)
+        "center": (screen_w // 2, screen_h // 2),
     }
 
     for label, pos in positions.items():
@@ -72,18 +75,28 @@ def calibrate():
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = face_mesh.process(rgb)
 
-            cv2.putText(frame, f"Look at {label} and press SPACE", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(
+                frame,
+                f"Look at {label} and press SPACE",
+                (30, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2,
+            )
             cv2.imshow("Calibration", frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == 32 and results.multi_face_landmarks:
-                iris_x, iris_y = get_iris(frame, results.multi_face_landmarks[0].landmark)
+                iris_x, iris_y = get_iris(
+                    frame, results.multi_face_landmarks[0].landmark
+                )
                 calibration_points[label] = (iris_x, iris_y, pos[0], pos[1])
                 break
             elif key == 27:
                 return False
     return True
+
 
 def map_to_screen(x, y):
     if gaze_transform is None:
@@ -124,15 +137,20 @@ while cap.isOpened():
         landmarks = results.multi_face_landmarks[0].landmark
         iris_x, iris_y = get_iris(frame, landmarks)
 
-
         target_x, target_y = map_to_screen(iris_x, iris_y)
 
         if filtered_cursor is None:
             filtered_cursor = (target_x, target_y)
         else:
             filtered_cursor = (
-                int(filtered_cursor[0] + SMOOTHING_ALPHA * (target_x - filtered_cursor[0])),
-                int(filtered_cursor[1] + SMOOTHING_ALPHA * (target_y - filtered_cursor[1]))
+                int(
+                    filtered_cursor[0]
+                    + SMOOTHING_ALPHA * (target_x - filtered_cursor[0])
+                ),
+                int(
+                    filtered_cursor[1]
+                    + SMOOTHING_ALPHA * (target_y - filtered_cursor[1])
+                ),
             )
 
         pyautogui.moveTo(*filtered_cursor)
@@ -148,9 +166,27 @@ while cap.isOpened():
                 pyautogui.click()
             blink_counter = 0
 
+        if blink_counter > 1:
+            cv2.putText(
+                frame,
+                "Blinking...",
+                (30, 70),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+            )
+
         cv2.circle(frame, (iris_x, iris_y), 4, (0, 255, 0), -1)
-        cv2.putText(frame, f"Cursor: ({target_x}, {target_y})", (30, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(
+            frame,
+            f"Cursor: ({target_x}, {target_y})",
+            (30, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
 
     cv2.imshow("Eye Tracker", frame)
     if cv2.waitKey(1) & 0xFF == 27:
